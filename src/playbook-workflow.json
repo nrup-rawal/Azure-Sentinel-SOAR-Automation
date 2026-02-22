@@ -1,0 +1,135 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Microsoft_Sentinel_incident": {
+                "type": "ApiConnectionWebhook",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                        }
+                    },
+                    "body": {
+                        "callback_url": "@listCallbackUrl()"
+                    },
+                    "path": "/incident-creation"
+                }
+            }
+        },
+        "actions": {
+            "Entities_-_Get_Accounts": {
+                "runAfter": {},
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                    "path": "/entities/account"
+                }
+            },
+            "For_each": {
+                "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                "actions": {
+                    "HTTP": {
+                        "type": "Http",
+                        "inputs": {
+                            "uri": "https://graph.microsoft.com/v1.0/users/@{item()?['AadUserId']}/revokeSignInSessions",
+                            "method": "POST",
+                            "headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "body": {},
+                            "authentication": {
+                                "type": "ActiveDirectoryOAuth",
+                                "authority": "https://login.microsoftonline.com",
+                                "tenant": "",
+                                "audience": "https://graph.microsoft.com",
+                                "clientId": "",
+                                "secret": ""
+                            }
+                        },
+                        "runtimeConfiguration": {
+                            "contentTransfer": {
+                                "transferMode": "Chunked"
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Entities_-_Get_Accounts": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "For_each_1": {
+                "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                "actions": {
+                    "Send_Email_(V3)": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['smtp-1']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "Importance": "High",
+                                "From": "nrup@nruprawal.com",
+                                "To": "work@nruprawal.com",
+                                "Subject": "CRITICAL: Impossible Travel Contained",
+                                "Body": "<p class=\"editor-paragraph\">Sentinel detected an impossible travel anomaly for user: @{item()?['Name']}<br>The Entra ID session has been automatically revoked via Graph API and the user is isolated.</p>"
+                            },
+                            "path": "/SendEmailV3"
+                        }
+                    }
+                },
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "azuresentinel": {
+                    "id": "/subscriptions/ea9ec713-3a02-4398-b483-e6182e38e379/providers/Microsoft.Web/locations/centralindia/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/ea9ec713-3a02-4398-b483-e6182e38e379/resourceGroups/RG-SecOps-Lab/providers/Microsoft.Web/connections/azuresentinel",
+                    "connectionName": "azuresentinel",
+                    "connectionProperties": {}
+                },
+                "azuresentinel-1": {
+                    "id": "/subscriptions/ea9ec713-3a02-4398-b483-e6182e38e379/providers/Microsoft.Web/locations/centralindia/managedApis/azuresentinel",
+                    "connectionId": "/subscriptions/ea9ec713-3a02-4398-b483-e6182e38e379/resourceGroups/RG-SecOps-Lab/providers/Microsoft.Web/connections/azuresentinel",
+                    "connectionName": "azuresentinel",
+                    "connectionProperties": {}
+                },
+                "smtp-1": {
+                    "id": "/subscriptions/ea9ec713-3a02-4398-b483-e6182e38e379/providers/Microsoft.Web/locations/centralindia/managedApis/smtp",
+                    "connectionId": "/subscriptions/ea9ec713-3a02-4398-b483-e6182e38e379/resourceGroups/RG-SecOps-Lab/providers/Microsoft.Web/connections/smtp",
+                    "connectionName": "smtp",
+                    "connectionProperties": {}
+                }
+            }
+        }
+    }
+}
